@@ -2,6 +2,10 @@
 Authors: Wouter Van Gansbeke, Simon Vandenhende
 Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
 """
+import os
+import json
+import os.path as osp
+import requests
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -32,12 +36,13 @@ def contrastive_evaluate(val_loader, model, memory_bank):
 
 
 @torch.no_grad()
-def get_predictions(p, dataloader, model, return_features=False):
+def get_predictions(p, dataloader, model, return_features=False, download=None):
     # Make predictions on a dataset with neighbors
     model.eval()
     predictions = [[] for _ in range(p['num_heads'])]
     probs = [[] for _ in range(p['num_heads'])]
     targets = []
+    url2label = {}
     if return_features:
         ft_dim = get_feature_dimensions_backbone(p)
         features = torch.zeros((len(dataloader.sampler), ft_dim)).cuda()
@@ -54,6 +59,8 @@ def get_predictions(p, dataloader, model, return_features=False):
     ptr = 0
     for batch in dataloader:
         images = batch[key_].cuda(non_blocking=True)
+        #import ipdb; ipdb.set_trace()
+        urls = batch['meta']['url']
         bs = images.shape[0]
         res = model(images, forward_pass='return_all')
         output = res['output']
@@ -61,11 +68,37 @@ def get_predictions(p, dataloader, model, return_features=False):
             features[ptr: ptr+bs] = res['features']
             ptr += bs
         for i, output_i in enumerate(output):
-            predictions[i].append(torch.argmax(output_i, dim=1))
+            labels = torch.argmax(output_i, dim=1)
+            if download is not None:
+                for img_idx, url in enumerate(urls):
+                    image_name = url.split("/")[-1]
+                    response = requests.get(url)
+                    url2label[url] = labels[img_idx].item()
+                    out_dir = osp.join(download, str(labels[img_idx].item()))
+                    if not os.path.exists(out_dir):
+                        print(f"Creating {out_dir}...")
+                        os.mkdir(out_dir)
+
+                    with open(osp.join(out_dir, image_name), 'wb') as f:
+                        f.write(response.content)
+
+            predictions[i].append(labels)
+            #import ipdb; ipdb.set_trace()
             probs[i].append(F.softmax(output_i, dim=1))
         targets.append(batch['target'])
         if include_neighbors:
             neighbors.append(batch['possible_neighbors'])
+
+    with open("/mydata/FashionClassification/data/product_data.json") as f:
+        data = json.load(f)
+    
+    for i, item in enumerate(data):
+        url = item["image_url"]
+        label = url2label[url]
+        data[i]["label"] = int(label)
+
+    with open('/mydata/FashionClassification/data/product_data_scan.json', 'w') as file:
+        json.dump(data, file, indent=4)
 
     predictions = [torch.cat(pred_, dim = 0).cpu() for pred_ in predictions]
     probs = [torch.cat(prob_, dim=0).cpu() for prob_ in probs]

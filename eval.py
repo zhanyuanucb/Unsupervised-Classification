@@ -18,6 +18,7 @@ FLAGS.add_argument('--config_exp', help='Location of config file')
 FLAGS.add_argument('--model', help='Location where model is saved')
 FLAGS.add_argument('--visualize_prototypes', action='store_true', 
                     help='Show the prototpye for each cluster')
+FLAGS.add_argument("--download", metavar="PATH", type=str, default=None)
 args = FLAGS.parse_args()
 
 def main():
@@ -26,7 +27,7 @@ def main():
     print(colored('Read config file {} ...'.format(args.config_exp), 'blue'))
     with open(args.config_exp, 'r') as stream:
         config = yaml.safe_load(stream)
-    config['batch_size'] = 512 # To make sure we can evaluate on a single 1080ti
+    config['batch_size'] = 64 # To make sure we can evaluate on a single 1080ti
     print(config)
 
     # Get dataset
@@ -82,7 +83,8 @@ def main():
     elif config['setup'] in ['scan', 'selflabel']:
         print(colored('Perform evaluation of the clustering model (setup={}).'.format(config['setup']), 'blue'))
         head = state_dict['head'] if config['setup'] == 'scan' else 0
-        predictions, features = get_predictions(config, dataloader, model, return_features=True)
+        predictions, features = get_predictions(config, dataloader, model, return_features=True, download=args.download)
+        #import ipdb; ipdb.set_trace()
         clustering_stats = hungarian_evaluate(head, predictions, dataset.classes, 
                                                 compute_confusion_matrix=True)
         print(clustering_stats)
@@ -132,12 +134,13 @@ def visualize_indices(indices, dataset, hungarian_match):
     import matplotlib.pyplot as plt
     import numpy as np
 
-    for idx in indices:
+    for i, idx in enumerate(indices):
         img = np.array(dataset.get_image(idx)).astype(np.uint8)
         img = Image.fromarray(img)
         plt.figure()
         plt.axis('off')
         plt.imshow(img)
+        plt.imsave(f"./proto/{i}.png", img)
         plt.show()
 
 

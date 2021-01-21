@@ -56,7 +56,8 @@ def get_model(p, pretrain_path=None):
             raise NotImplementedError
 
     elif p['backbone'] == 'resnet50':
-        if 'imagenet' in p['train_db_name']:
+        #if 'imagenet' in p['train_db_name']:
+        if p['train_db_name'] in ['imagenet', 'fashion']:
             from models.resnet import resnet50
             backbone = resnet50()  
 
@@ -141,6 +142,10 @@ def get_train_dataset(p, transform, to_augmented_dataset=False,
         subset_file = './data/imagenet_subsets/%s.txt' %(p['train_db_name'])
         dataset = ImageNetSubset(subset_file=subset_file, split='train', transform=transform)
 
+    elif p['train_db_name'] == 'fashion':
+        from data.fashion import Fashion
+        dataset = Fashion(split=split, transform=transform)
+
     else:
         raise ValueError('Invalid train dataset {}'.format(p['train_db_name']))
     
@@ -179,7 +184,11 @@ def get_val_dataset(p, transform=None, to_neighbors_dataset=False):
         from data.imagenet import ImageNetSubset
         subset_file = './data/imagenet_subsets/%s.txt' %(p['val_db_name'])
         dataset = ImageNetSubset(subset_file=subset_file, split='val', transform=transform)
-    
+
+    elif p['val_db_name'] == 'fashion':
+        from data.fashion import Fashion
+        dataset = Fashion(split='val', transform=transform)
+   
     else:
         raise ValueError('Invalid validation dataset {}'.format(p['val_db_name']))
     
@@ -246,9 +255,10 @@ def get_train_transformations(p):
 
 def get_val_transformations(p):
     return transforms.Compose([
-            transforms.CenterCrop(p['transformation_kwargs']['crop_size']),
+            #transforms.CenterCrop(p['transformation_kwargs']['crop_size']),
             transforms.ToTensor(), 
-            transforms.Normalize(**p['transformation_kwargs']['normalize'])])
+            #transforms.Normalize(**p['transformation_kwargs']['normalize'])
+    ])
 
 
 def get_optimizer(p, model, cluster_head_only=False):
